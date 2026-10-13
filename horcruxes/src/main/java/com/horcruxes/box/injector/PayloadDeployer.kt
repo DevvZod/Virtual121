@@ -80,9 +80,31 @@ object PayloadDeployer {
     fun prepareGuestStorage(packageName: String, userId: Int): Long {
         return try {
             val internal = BEnvironment.getDataDir(packageName, userId)
+
+            // Standard internal subdirs
             for (sub in arrayOf("", "files", "cache", "app_libs", "databases")) {
                 val f = if (sub.isEmpty()) internal else File(internal, sub)
                 if (!f.exists()) f.mkdirs()
+            }
+
+            // MLBB extraction roots:
+            // 1. app_libs/ subdirs — libResources*.so archives extract comlibs/arm64-v8a/ etc here
+            // 2. dataDir root subdirs — Resources4-*.dat archives extract UI/android/, AStarPath/ etc here
+            val mlbbSubdirs = arrayOf(
+                "comlibs", "comlibs/arm64-v8a", "comlibs/armeabi-v7a",
+                "UI", "UI/android",
+                "Art", "Art/android",
+                "AStarPath",
+                "Audio", "Audio/android",
+                "Data", "Data/android",
+                "Movie", "Movie/android",
+                "Scene", "Scene/android",
+                "Config"
+            )
+            val appLibsDir = File(internal, "app_libs")
+            for (sub in mlbbSubdirs) {
+                File(appLibsDir, sub).mkdirs()       // app_libs/<sub>/
+                File(internal, sub).mkdirs()          // <dataDir>/<sub>/
             }
 
             val external = BEnvironment.getExternalDataDir(packageName, userId)

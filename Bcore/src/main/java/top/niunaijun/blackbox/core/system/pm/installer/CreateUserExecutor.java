@@ -49,7 +49,10 @@ public class CreateUserExecutor implements Executor {
 
     public static void createGameAssetDirs(String packageName, int userId) {
         try {
-            String[] subdirs = new String[]{
+            // Asset subdirs that MLBB's 7-Zip extractor expects to exist before
+            // it opens output files. ENOENT (error: 2) on any of these kills the
+            // whole extraction task (failedCount++ → "no space" dialog).
+            String[] assetSubdirs = new String[]{
                     "dragon2017",
                     "dragon2017/assets",
                     "dragon2017/assets/comlibs",
@@ -78,6 +81,7 @@ public class CreateUserExecutor implements Executor {
                     "assets/Art",
                     "assets/Art/android",
                     "assets/AStarPath",
+                    // Flat paths -- also needed relative to files/ root
                     "comlibs",
                     "comlibs/arm64-v8a",
                     "comlibs/armeabi-v7a",
@@ -85,25 +89,96 @@ public class CreateUserExecutor implements Executor {
                     "UI/android",
                     "Art",
                     "Art/android",
-                    "AStarPath"
+                    "AStarPath",
+                    "Audio",
+                    "Audio/android",
+                    "Data",
+                    "Data/android",
+                    "Movie",
+                    "Movie/android",
+                    "Scene",
+                    "Scene/android",
+                    "Config",
+            };
+
+            // Subdirs needed INSIDE app_libs/ — libResources*.so archives extract
+            // their payload (comlibs/arm64-v8a/libcsharp.bytes etc.) relative to
+            // the app_libs/ directory. Without these the open() syscall gets ENOENT.
+            String[] appLibsSubdirs = new String[]{
+                    "comlibs",
+                    "comlibs/arm64-v8a",
+                    "comlibs/armeabi-v7a",
+                    "UI",
+                    "UI/android",
+                    "Art",
+                    "Art/android",
+                    "AStarPath",
+                    "Audio",
+                    "Audio/android",
+                    "Data",
+                    "Data/android",
+                    "Movie",
+                    "Movie/android",
+                    "Scene",
+                    "Scene/android",
+                    "Config",
+            };
+
+            // Subdirs needed at dataDir ROOT — Resources4-*.dat archives use relative
+            // paths (UI/android/foo.unity3d, AStarPath/bar.xml, Art/android/baz.unity3d)
+            // resolved against the game's working directory (dataDir root).
+            String[] dataDirRootSubdirs = new String[]{
+                    "comlibs",
+                    "comlibs/arm64-v8a",
+                    "comlibs/armeabi-v7a",
+                    "UI",
+                    "UI/android",
+                    "Art",
+                    "Art/android",
+                    "AStarPath",
+                    "Audio",
+                    "Audio/android",
+                    "Data",
+                    "Data/android",
+                    "Movie",
+                    "Movie/android",
+                    "Scene",
+                    "Scene/android",
+                    "Config",
+                    "app_libs",
             };
 
             File externalFiles = BEnvironment.getExternalDataFilesDir(packageName, userId);
             File internalFiles = BEnvironment.getDataFilesDir(packageName, userId);
-            File[] bases = new File[]{
+            File dataDir       = BEnvironment.getDataDir(packageName, userId);
+            File appLibsDir    = new File(dataDir, "app_libs");
+
+            // 1. Pre-create under files/ and external files/ (dragon2017/assets tree + flat)
+            File[] filesBases = new File[]{
                     externalFiles,
                     internalFiles,
                     new File(externalFiles, "dragon2017"),
                     new File(internalFiles, "dragon2017"),
                     new File(externalFiles, "dragon2017/assets"),
-                    new File(internalFiles, "dragon2017/assets")
+                    new File(internalFiles, "dragon2017/assets"),
             };
-
-            for (File base : bases) {
-                for (String sub : subdirs) {
+            for (File base : filesBases) {
+                for (String sub : assetSubdirs) {
                     FileUtils.mkdirs(new File(base, sub));
                 }
             }
+
+            // 2. Pre-create under app_libs/ (libResources*.so extraction root)
+            FileUtils.mkdirs(appLibsDir);
+            for (String sub : appLibsSubdirs) {
+                FileUtils.mkdirs(new File(appLibsDir, sub));
+            }
+
+            // 3. Pre-create at dataDir root (Resources4-*.dat extraction root)
+            for (String sub : dataDirRootSubdirs) {
+                FileUtils.mkdirs(new File(dataDir, sub));
+            }
+
         } catch (Throwable ignored) {
         }
     }
