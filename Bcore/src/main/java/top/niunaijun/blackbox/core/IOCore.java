@@ -68,19 +68,49 @@ public class IOCore {
     public String redirectPath(String path) {
         if (TextUtils.isEmpty(path))
             return path;
-        if (path.contains("/AkatskiGamespace/")) {
+        try {
+            // Already inside the virtual external root -> never redirect twice.
+            // The root comes from a STATIC CACHE published by BEnvironment
+            // AFTER it is fully initialized: touching the BEnvironment class
+            // here re-enters its static initializer through the OsStub proxy
+            // (getExternalFilesDir -> File.exists -> checkAccess ->
+            // redirectPath) and crashed the engine with
+            // ExceptionInInitializerError (sExternalVirtualRoot still null
+            // mid-clinit). Never call back into BEnvironment from I/O
+            // redirection.
+            String hostPkg = BlackBoxCore.getHostPkg();
+            if (hostPkg != null && path.contains("/Android/data/" + hostPkg)) {
+                return path;
+            }
+            String extRoot = sExtRootCache;
+            if (extRoot != null && (path.contains(extRoot + "/") || path.equals(extRoot))) {
+                return path;
+            }
+            String search = sBlackTree.search(path);
+            if (!TextUtils.isEmpty(search))
+                return search;
+
+            // Search the key from TrieTree
+            String key = mTrieTree.search(path);
+            if (!TextUtils.isEmpty(key)) {
+                String rule = mRedirectMap.get(key);
+                if (rule != null) {
+                    path = path.replace(key, rule);
+                }
+            }
+        } catch (Throwable t) {
+            // I/O redirection must NEVER crash the process - on any
+            // failure pass the original path through untouched.
             return path;
         }
-        String search = sBlackTree.search(path);
-        if (!TextUtils.isEmpty(search))
-            return search;
-
-        //Search the key from TrieTree
-        String key = mTrieTree.search(path);
-        if (!TextUtils.isEmpty(key))
-            path = path.replace(key, Objects.requireNonNull(mRedirectMap.get(key)));
-
         return path;
+    }
+
+    // External venv root cache - published by BEnvironment once resolved.
+    private static volatile String sExtRootCache = null;
+
+    public static void cacheExternalRoot(String absolutePath) {
+        sExtRootCache = absolutePath;
     }
 
     public File redirectPath(File path) {

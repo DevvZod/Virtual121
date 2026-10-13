@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import java.io.File;
 import android.content.pm.ConfigurationInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.InstrumentationInfo;
@@ -302,6 +303,44 @@ public class PackageManagerCompat {
         ai.processName = BPackageManagerService.fixProcessName(p.packageName, ai.packageName);
         ai.publicSourceDir = sourceDir;
         ai.sourceDir = sourceDir;
+        // SPLIT APK support (HORCRUX): expose the split APKs the installer
+        // cloned next to the venv base.apk. From here they flow into every
+        // guest-side ApplicationInfo (bind data, loadedApk, PM queries) and
+        // AOSP's LoadedApk.createOrUpdateClassLoaderLocked +
+        // createAssetManager wire the classloader paths and AssetManager
+        // asset paths automatically. Games that enumerate
+        // sourceDir + splitSourceDirs to read their packaged assets (MLBB's
+        // SevenZipTask opens comlibs/*.bytes from its own APKs) only work
+        // when this is populated.
+        try {
+            File baseDir = new File(sourceDir).getParentFile();
+            if (baseDir != null && baseDir.isDirectory()) {
+                File[] splitFiles = baseDir.listFiles(new java.io.FilenameFilter() {
+                    @Override
+                    public boolean accept(File dir, String name) {
+                        return name.startsWith("split_") && name.endsWith(".apk");
+                    }
+                });
+                if (splitFiles != null && splitFiles.length > 0) {
+                    java.util.Arrays.sort(splitFiles, new java.util.Comparator<File>() {
+                        @Override
+                        public int compare(File a, File b) {
+                            return a.getName().compareTo(b.getName());
+                        }
+                    });
+                    String[] splitPaths = new String[splitFiles.length];
+                    for (int i = 0; i < splitFiles.length; i++) {
+                        splitPaths[i] = splitFiles[i].getAbsolutePath();
+                    }
+                    ai.splitSourceDirs = splitPaths;
+                    try {
+                        ai.splitPublicSourceDirs = splitPaths;
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
         ai.uid = p.mExtras.appId;
 //        ai.uid = baseApplication.uid;
 

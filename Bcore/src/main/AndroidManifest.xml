@@ -1,6 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="top.niunaijun.blackbox">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- unknown -->
     <uses-permission android:name="android.permission.WRITE_SOCIAL_STREAM" />
@@ -386,6 +385,11 @@
         </service>
 
 
+        <activity
+            android:name=".proxy.ProxyPermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity
             android:name=".proxy.ProxyActivity$P0"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"

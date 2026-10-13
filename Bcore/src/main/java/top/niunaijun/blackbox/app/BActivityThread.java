@@ -67,6 +67,7 @@ import top.niunaijun.blackbox.core.system.user.BUserHandle;
 import top.niunaijun.blackbox.entity.AppConfig;
 import top.niunaijun.blackbox.entity.am.ReceiverData;
 import top.niunaijun.blackbox.entity.pm.InstalledModule;
+import top.niunaijun.blackbox.core.system.pm.installer.CreateUserExecutor;
 import top.niunaijun.blackbox.fake.delegate.AppInstrumentation;
 import top.niunaijun.blackbox.fake.delegate.ContentProviderDelegate;
 import top.niunaijun.blackbox.fake.frameworks.BXposedManager;
@@ -341,6 +342,8 @@ public class BActivityThread extends IBActivityThread.Stub {
         NativeCore.init(Build.VERSION.SDK_INT);
         assert packageContext != null;
         IOCore.get().enableRedirect(packageContext);
+        CreateUserExecutor.ensureUserDirs(packageName, getUserId());
+        ContextCompat.fix(packageContext);
 
         AppBindData bindData = new AppBindData();
         bindData.appInfo = applicationInfo;

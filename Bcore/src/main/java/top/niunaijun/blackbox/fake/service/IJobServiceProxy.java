@@ -57,7 +57,7 @@ public class IJobServiceProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             args[0] = BlackBoxCore.getBJobManager()
-                    .cancel(BActivityThread.getAppConfig().processName, (Integer) args[0]);
+                    .cancel(BActivityThread.getAppConfig().processName, ((Number) args[0]).intValue());
             return method.invoke(who, args);
         }
     }

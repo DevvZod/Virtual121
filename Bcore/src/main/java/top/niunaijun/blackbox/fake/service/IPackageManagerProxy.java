@@ -79,6 +79,15 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         addMethodHook(new ValueMethodProxy("addOnPermissionsChangeListener", 0));
         addMethodHook(new ValueMethodProxy("removeOnPermissionsChangeListener", 0));
         addMethodHook(new PkgMethodProxy("shouldShowRequestPermissionRationale"));
+        // HORCRUX auto-permission (guest side): PackageManager.checkPermission /
+        // checkUidPermission always report granted; getPermissionFlags reports
+        // the default (never "user set" / "one-time"). These proxies only
+        // exist in GUEST processes, so the host's real checks are untouched.
+        addMethodHook(new ValueMethodProxy("checkPermission",
+                android.content.pm.PackageManager.PERMISSION_GRANTED));
+        addMethodHook(new ValueMethodProxy("checkUidPermission",
+                android.content.pm.PackageManager.PERMISSION_GRANTED));
+        addMethodHook(new ValueMethodProxy("getPermissionFlags", 0));
     }
 
     @ProxyMethod("resolveIntent")
@@ -87,7 +96,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             Intent intent = (Intent) args[0];
             String resolvedType = (String) args[1];
-            int flags = (int) args[2];
+            int flags = ((Number) args[2]).intValue();
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveIntent(intent, resolvedType, flags, BActivityThread.getUserId());
             if (resolveInfo != null) {
                 return resolveInfo;
@@ -102,7 +111,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             Intent intent = (Intent) args[0];
             String resolvedType = (String) args[1];
-            int flags = (int) args[2];
+            int flags = ((Number) args[2]).intValue();
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveService(intent, flags, resolvedType, BActivityThread.getUserId());
             if (resolveInfo != null) {
                 return resolveInfo;
@@ -124,7 +133,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String packageName = (String) args[0];
-            int flag = (int) args[1];
+            int flag = ((Number) args[1]).intValue();
 //            if (ClientSystemEnv.isFakePackage(packageName)) {
 //                packageName = BlackBoxCore.getHostPkg();
 //            }
@@ -153,7 +162,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             ComponentName componentName = (ComponentName) args[0];
-            int flags = (int) args[1];
+            int flags = ((Number) args[1]).intValue();
             ProviderInfo providerInfo = BlackBoxCore.getBPackageManager().getProviderInfo(componentName, flags, BActivityThread.getUserId());
             if (providerInfo != null)
                 return providerInfo;
@@ -169,7 +178,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             ComponentName componentName = (ComponentName) args[0];
-            int flags = (int) args[1];
+            int flags = ((Number) args[1]).intValue();
             ActivityInfo receiverInfo = BlackBoxCore.getBPackageManager().getReceiverInfo(componentName, flags, BActivityThread.getUserId());
             if (receiverInfo != null)
                 return receiverInfo;
@@ -185,7 +194,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             ComponentName componentName = (ComponentName) args[0];
-            int flags = (int) args[1];
+            int flags = ((Number) args[1]).intValue();
             ActivityInfo activityInfo = BlackBoxCore.getBPackageManager().getActivityInfo(componentName, flags, BActivityThread.getUserId());
             if (activityInfo != null)
                 return activityInfo;
@@ -202,7 +211,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             ComponentName componentName = (ComponentName) args[0];
-            int flags = (int) args[1];
+            int flags = ((Number) args[1]).intValue();
             ServiceInfo serviceInfo = BlackBoxCore.getBPackageManager().getServiceInfo(componentName, flags, BActivityThread.getUserId());
             if (serviceInfo != null)
                 return serviceInfo;
@@ -218,7 +227,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            int flags = (int) args[0];
+            int flags = ((Number) args[0]).intValue();
             List<ApplicationInfo> installedApplications = BlackBoxCore.getBPackageManager().getInstalledApplications(flags, BActivityThread.getUserId());
             return ParceledListSliceCompat.create(installedApplications);
         }
@@ -229,7 +238,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            int flags = (int) args[0];
+            int flags = ((Number) args[0]).intValue();
             List<PackageInfo> installedPackages = BlackBoxCore.getBPackageManager().getInstalledPackages(flags, BActivityThread.getUserId());
             return ParceledListSliceCompat.create(installedPackages);
         }
@@ -240,7 +249,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String packageName = (String) args[0];
-            int flags = (int) args[1];
+            int flags = ((Number) args[1]).intValue();
 //            if (ClientSystemEnv.isFakePackage(packageName)) {
 //                packageName = BlackBoxCore.getHostPkg();
 //            }
@@ -259,7 +268,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class QueryContentProviders extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            int flags = (int) args[2];
+            int flags = ((Number) args[2]).intValue();
             List<ProviderInfo> providers = BlackBoxCore.getBPackageManager().
                     queryContentProviders(BActivityThread.getAppProcessName(), BActivityThread.getBUid(), flags, BActivityThread.getUserId());
             return ParceledListSliceCompat.create(providers);
@@ -291,7 +300,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String authority = (String) args[0];
-            int flags = (int) args[1];
+            int flags = ((Number) args[1]).intValue();
             ProviderInfo providerInfo = BlackBoxCore.getBPackageManager().resolveContentProvider(authority, flags, BActivityThread.getUserId());
             if (providerInfo == null) {
                 return method.invoke(who, args);
@@ -313,10 +322,10 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class GetPackagesForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            int uid = (Integer) args[0];
+            int uid = ((Number) args[0]).intValue();
             if (uid == BlackBoxCore.getHostUid()) {
                 args[0] = BActivityThread.getBUid();
-                uid = (int) args[0];
+                uid = ((Number) args[0]).intValue();
             }
             String[] packagesForUid = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
             Slog.d(TAG, args[0] + " , " + BActivityThread.getAppProcessName() + " GetPackagesForUid: " + Arrays.toString(packagesForUid));

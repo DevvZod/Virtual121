@@ -1,60 +1,28 @@
-plugins {
-    id 'com.android.library'
-}
-
+plugins { id 'com.android.library' }
 android {
-    compileSdkVersion 30
-    buildToolsVersion "30.0.3"
-
+    namespace 'top.niunaijun.black_fake'
+    compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        minSdkVersion 21
+        minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
         consumerProguardFiles "consumer-rules.pro"
     }
-
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-    dexOptions {
-        preDexLibraries false
-        maxProcessCount 8
-        javaMaxHeapSize "4g"
-    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    aaptOptions {
-        cruncherEnabled = false
-        useNewCruncher = false
-    }
-    testOptions {
-        unitTests.returnDefaultValues = true
-    }
-    lintOptions {
+    testOptions { unitTests.returnDefaultValues = true }
+    lint {
         checkReleaseBuilds false
         abortOnError false
-        warningsAsErrors false
-        disable "UnusedResources", 'RestrictedApi'
-        textOutput "stdout"
-        textReport false
-        check 'NewApi', 'InlinedApi'
     }
 }
-
-
-tasks.withType(Javadoc) {
-    options.addStringOption('Xdoclint:none', '-quiet')
-    options.addStringOption('encoding', 'UTF-8')
-    options.addStringOption('charSet', 'UTF-8')
-}
-
-
 dependencies {
     implementation project(':Bcore:black-hook')
 }

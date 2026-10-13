@@ -9,8 +9,12 @@ import black.android.content.AttributionSourceStateContext;
 import black.android.content.BRAttributionSource;
 import black.android.content.BRAttributionSourceState;
 import black.android.content.BRContentResolver;
+import java.io.File;
+
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.core.env.BEnvironment;
+import top.niunaijun.blackbox.utils.FileUtils;
 
 /**
  * Created by Milk on 3/31/21.
@@ -56,11 +60,44 @@ public class ContextCompat {
             BRContextImplKitkat.get(context)._set_mOpPackageName(BlackBoxCore.getHostPkg());
             BRContentResolver.get(context.getContentResolver())._set_mPackageName(BlackBoxCore.getHostPkg());
 
+            String packageName = BActivityThread.getAppPackageName();
+            if (packageName == null) {
+                try {
+                    packageName = context.getPackageName();
+                } catch (Throwable ignored) {
+                }
+            }
+            int userId = BActivityThread.getUserId();
+            if (packageName != null) {
+                File externalFilesDir = BEnvironment.getExternalDataFilesDir(packageName, userId);
+                File externalCacheDir = BEnvironment.getExternalDataCacheDir(packageName, userId);
+                File externalMediaDir = new File(BEnvironment.getExternalDataDir(packageName, userId), "media");
+                FileUtils.mkdirs(externalFilesDir);
+                FileUtils.mkdirs(externalCacheDir);
+                FileUtils.mkdirs(externalMediaDir);
+                setField(context, "mExternalFilesDirs", new File[]{externalFilesDir});
+                setField(context, "mExternalCacheDirs", new File[]{externalCacheDir});
+                setField(context, "mExternalMediaDirs", new File[]{externalMediaDir});
+            }
+
             if (BuildCompat.isS()) {
                 fixAttributionSourceState(BRContextImpl.get(context).getAttributionSource(), BActivityThread.getBUid());
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void setField(Object target, String fieldName, Object val) {
+        if (target == null) return;
+        for (Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                f.set(target, val);
+                return;
+            } catch (Throwable ignored) {
+            }
         }
     }
 }

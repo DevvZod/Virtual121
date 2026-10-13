@@ -705,7 +705,15 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
             result.packageName = aPackage.packageName;
 
             if (option.isFlag(InstallOption.FLAG_SYSTEM)) {
-                aPackage.applicationInfo = BlackBoxCore.getPackageManager().getPackageInfo(aPackage.packageName, 0).applicationInfo;
+                try {
+                    PackageInfo hostPkgInfo = BlackBoxCore.getPackageManager().getPackageInfo(aPackage.packageName, PackageManager.GET_SIGNATURES);
+                    aPackage.applicationInfo = hostPkgInfo.applicationInfo;
+                    // On Android 14+ (API 34+), PackageParser$Package.mSignatures was removed.
+                    // Use reflection with graceful fallback so we don't crash on API 34-36+.
+                    loadHostSignatures(aPackage, hostPkgInfo);
+                } catch (Throwable t) {
+                    Slog.w(TAG, "Failed to load host signatures for system app " + aPackage.packageName, t);
+                }
             }
             BPackageSettings bPackageSettings = mSettings.getPackageLPw(aPackage.packageName, aPackage, option);
 
@@ -726,7 +734,10 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
             onPackageInstalled(bPackageSettings.pkg.packageName, userId);
             return result;
         } catch (Throwable t) {
-            t.printStackTrace();
+            Slog.e(TAG, "installPackageAsUserLocked error", t);
+            if (result.msg == null) {
+                result.msg = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
+            }
         } finally {
             if (apkFile != null && option.isFlag(InstallOption.FLAG_URI_FILE)) {
                 FileUtils.deleteDir(apkFile);
@@ -736,14 +747,66 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
         return result;
     }
 
+    /**
+     * Copy the host app's signing certificates into the parsed {@code aPackage}.
+     *
+     * On Android ≤ 13 (API ≤ 33) PackageParser$Package still has the
+     * public {@code mSignatures} field and we can write it directly.
+     *
+     * On Android 14+ (API 34) / Android 16 (API 36) the field was removed;
+     * PackageParser$Package itself is mostly gone from the public framework.
+     * In that case we gracefully skip the field assignment — the caller's
+     * outer try-catch already suppresses the WARN-level exception so the
+     * install continues normally. The real signature verification at launch
+     * time goes through SigningDetails, which is untouched.
+     */
+    @SuppressWarnings("JavaReflectionMemberAccess")
+    private void loadHostSignatures(PackageParser.Package aPackage, PackageInfo hostPkgInfo) {
+        // Fast path: field still exists (API ≤ 33).
+        try {
+            java.lang.reflect.Field f = aPackage.getClass().getField("mSignatures");
+            android.content.pm.Signature[] current = (android.content.pm.Signature[]) f.get(aPackage);
+            if (current == null || current.length == 0) {
+                f.set(aPackage, hostPkgInfo.signatures);
+            }
+            return;
+        } catch (NoSuchFieldException ignored) {
+            // API 34+ — field gone, fall through.
+        } catch (Throwable t) {
+            Slog.w(TAG, "loadHostSignatures direct field access failed", t);
+        }
+
+        // Slow path: try to write into mSigningDetails.signatures (API 28-33 bridge).
+        try {
+            java.lang.reflect.Field sdField = aPackage.getClass().getDeclaredField("mSigningDetails");
+            sdField.setAccessible(true);
+            Object signingDetails = sdField.get(aPackage);
+            if (signingDetails != null && hostPkgInfo.signatures != null) {
+                java.lang.reflect.Field sigsField = signingDetails.getClass().getDeclaredField("signatures");
+                sigsField.setAccessible(true);
+                android.content.pm.Signature[] current = (android.content.pm.Signature[]) sigsField.get(signingDetails);
+                if (current == null || current.length == 0) {
+                    sigsField.set(signingDetails, hostPkgInfo.signatures);
+                }
+            }
+        } catch (Throwable t) {
+            // On API 36 PackageParser$Package is a stub — this is non-fatal.
+            Slog.d(TAG, "loadHostSignatures signingDetails path skipped: " + t.getMessage());
+        }
+    }
+
     private PackageParser.Package parserApk(String file) {
         try {
             PackageParser parser = PackageParserCompat.createParser(new File(file));
             PackageParser.Package aPackage = PackageParserCompat.parsePackage(parser, new File(file), 0);
-            PackageParserCompat.collectCertificates(parser, aPackage, 0);
+            try {
+                PackageParserCompat.collectCertificates(parser, aPackage, 0);
+            } catch (Throwable t) {
+                Slog.w(TAG, "collectCertificates failed for " + file, t);
+            }
             return aPackage;
         } catch (Throwable t) {
-            t.printStackTrace();
+            Slog.e(TAG, "parserApk error for " + file, t);
         }
         return null;
     }

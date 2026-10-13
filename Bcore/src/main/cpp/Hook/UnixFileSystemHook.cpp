@@ -19,6 +19,16 @@ HOOK_JNI(jstring, canonicalize0, JNIEnv *env, jobject obj, jstring path) {
 
 /*
  * Class:     java_io_UnixFileSystem
+ * Method:    canonicalize0 (Android 16+)
+ * Signature: (Ljava/lang/String;Z)Ljava/lang/String;
+ */
+HOOK_JNI(jstring, canonicalize0_v2, JNIEnv *env, jobject obj, jstring path, jboolean isAtLeastTargetSdk35) {
+    jstring redirect = IO::redirectPath(env, path);
+    return orig_canonicalize0_v2(env, obj, redirect, isAtLeastTargetSdk35);
+}
+
+/*
+ * Class:     java_io_UnixFileSystem
  * Method:    getBooleanAttributes0
  * Signature: (Ljava/lang/String;)I
  */
@@ -103,18 +113,43 @@ HOOK_JNI(jboolean, setReadOnly0, JNIEnv *env, jobject obj, jobject file) {
  * Method:    getSpace0
  * Signature: (Ljava/io/File;I)J
  */
-HOOK_JNI(jboolean, getSpace0, JNIEnv *env, jobject obj, jobject file, jint t) {
+// FIX: getSpace0 returns a long (bytes). It was declared jboolean, which
+// truncated the result to its low 8 bits (0-255 bytes) -> the game's
+// free-space guard always saw "not enough space".
+HOOK_JNI(jlong, getSpace0, JNIEnv *env, jobject obj, jobject file, jint t) {
     jobject redirect = IO::redirectPath(env, file);
     return orig_getSpace0(env, obj, redirect, t);
+}
+/*
+ * Class:     java_io_UnixFileSystem
+ * Method:    checkAccess
+ * Signature: (Ljava/io/File;I)Z
+ */
+HOOK_JNI(jboolean, checkAccess, JNIEnv *env, jobject obj, jobject file, jint access) {
+    jobject redirect = IO::redirectPath(env, file);
+    return orig_checkAccess(env, obj, redirect, access);
 }
 
 void UnixFileSystemHook::init(JNIEnv *env) {
     const char *className = "java/io/UnixFileSystem";
+    // Android 16+ canonicalize0(String, boolean) — try the new signature
+    // first, then the legacy one-arg form. The non-matching attempt logs
+    // "jni hook unavailable" and skips gracefully (hardened HookJniFun).
+    JniHook::HookJniFun(env, className, "canonicalize0", "(Ljava/lang/String;Z)Ljava/lang/String;",
+                        (void *) new_canonicalize0_v2, (void **) (&orig_canonicalize0_v2), false);
     JniHook::HookJniFun(env, className, "canonicalize0", "(Ljava/lang/String;)Ljava/lang/String;",
                         (void *) new_canonicalize0, (void **) (&orig_canonicalize0), false);
-//    JniHook::HookJniFun(env, className, "getBooleanAttributes0", "(Ljava/lang/String;)I",
-//                        (void *) new_getBooleanAttributes0,
-//                        (void **) (&orig_getBooleanAttributes0), false);
+    // RE-ENABLED on Android 16: File.isDirectory()/isFile()/exists()-style
+    // checks all route through getBooleanAttributes0(f.getPath()). Without
+    // this hook, every redirect-based directory check ran against the REAL
+    // path — which is another app's Android/data, blocked by scoped
+    // storage — so the guest's resource extraction aborted with
+    // "prepareOutputDir, is not directory" and the game showed
+    // "Extract Failed". The method is still native on Android 16 per
+    // libcore main branch.
+    JniHook::HookJniFun(env, className, "getBooleanAttributes0", "(Ljava/lang/String;)I",
+                        (void *) new_getBooleanAttributes0,
+                        (void **) (&orig_getBooleanAttributes0), false);
     JniHook::HookJniFun(env, className, "getLastModifiedTime0", "(Ljava/io/File;)J",
                         (void *) new_getLastModifiedTime0, (void **) (&orig_getLastModifiedTime0),
                         false);
@@ -134,4 +169,8 @@ void UnixFileSystemHook::init(JNIEnv *env) {
                         (void *) new_setReadOnly0, (void **) (&orig_setReadOnly0), false);
     JniHook::HookJniFun(env, className, "getSpace0", "(Ljava/io/File;I)J",
                         (void *) new_getSpace0, (void **) (&orig_getSpace0), false);
+    JniHook::HookJniFun(env, className, "checkAccess", "(Ljava/io/File;I)Z",
+                        (void *) new_checkAccess, (void **) (&orig_checkAccess), false);
+    JniHook::HookJniFun(env, className, "checkAccess0", "(Ljava/io/File;I)Z",
+                        (void *) new_checkAccess, (void **) (&orig_checkAccess), false);
 }

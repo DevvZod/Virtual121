@@ -45,6 +45,23 @@ public class ActivityManagerCommonProxy {
             if (intent.getParcelableExtra("_B_|_target_") != null) {
                 return method.invoke(who, args);
             }
+            // HORCRUX auto-permission: a guest app asking for runtime
+            // permissions must never show the SYSTEM dialog (which would
+            // attribute the request to the HOST package and can never grant
+            // the guest's manifest permissions). Redirect the request to our
+            // transparent ProxyPermissionActivity, which instantly returns
+            // ALL_GRANTED results to the caller through the normal activity
+            // result channel — while IActivityManager.checkPermission
+            // (auto-grant in guest) keeps every subsequent check green.
+            if (ComponentUtils.isRequestPermission(intent)) {
+                String[] perms = intent.getStringArrayExtra(
+                        "android.content.pm.extra.REQUEST_PERMISSIONS_NAMES");
+                Slog.d(TAG, "permission request intercepted: "
+                        + (perms == null ? "(none)" : java.util.Arrays.toString(perms)));
+                intent.setClassName(BlackBoxCore.getHostPkg(),
+                        "top.niunaijun.blackbox.proxy.ProxyPermissionActivity");
+                return method.invoke(who, args);
+            }
             if (ComponentUtils.isRequestInstall(intent)) {
                 File file = FileProviderHandler.convertFile(BActivityThread.getApplication(), intent.getData());
                 if (BlackBoxCore.get().requestInstallPackage(file, BActivityThread.getUserId())) {

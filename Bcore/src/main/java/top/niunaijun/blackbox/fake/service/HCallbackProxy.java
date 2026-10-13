@@ -107,10 +107,25 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
     }
 
     private Object getLaunchActivityItem(Object clientTransaction) {
-        List<Object> mActivityCallbacks = BRClientTransaction.get(clientTransaction).mActivityCallbacks();
-
+        // Android 16: transactions without activity callbacks (pure
+        // lifecycle-state requests) arrive with a NULL mActivityCallbacks
+        // list — the old unguarded for-each NPE'd the whole guest on the
+        // first such transaction. Guard every reflection step; non-launch
+        // transactions must pass through harmlessly.
+        black.android.app.servertransaction.ClientTransactionContext brTransaction = BRClientTransaction.get(clientTransaction);
+        if (brTransaction == null) {
+            return null;
+        }
+        List<Object> mActivityCallbacks = brTransaction.mActivityCallbacks();
+        if (mActivityCallbacks == null) {
+            return null;
+        }
+        Class<?> launchItemClass = BRLaunchActivityItem.getRealClass();
+        if (launchItemClass == null) {
+            return null;
+        }
         for (Object obj : mActivityCallbacks) {
-            if (BRLaunchActivityItem.getRealClass().getName().equals(obj.getClass().getCanonicalName())) {
+            if (obj != null && launchItemClass.getName().equals(obj.getClass().getCanonicalName())) {
                 return obj;
             }
         }
@@ -140,13 +155,16 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
             token = clientRecordContext.token();
         }
 
-        if (intent == null)
+        if (intent == null) {
+            Slog.d(TAG, "launch: intent null");
             return false;
+        }
 
         ProxyActivityRecord stubRecord = ProxyActivityRecord.create(intent);
         ActivityInfo activityInfo = stubRecord.mActivityInfo;
         if (activityInfo != null) {
             if (BActivityThread.getAppConfig() == null) {
+                Slog.d(TAG, "launch: bind-restart for " + activityInfo.packageName);
                 BlackBoxCore.getBActivityManager().restartProcess(activityInfo.packageName, activityInfo.processName, stubRecord.mUserId);
 
                 Intent launchIntentForPackage = BlackBoxCore.getBPackageManager().getLaunchIntentForPackage(activityInfo.packageName, stubRecord.mUserId);
@@ -165,6 +183,7 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
             }
             // bind
             if (!BActivityThread.currentActivityThread().isInit()) {
+                Slog.d(TAG, "launch: bindApplication for " + activityInfo.packageName);
                 BActivityThread.currentActivityThread().bindApplication(activityInfo.packageName,
                         activityInfo.processName);
                 return true;
@@ -174,23 +193,48 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
             BlackBoxCore.getBActivityManager().onActivityCreated(taskId, token, stubRecord.mActivityRecord);
 
             if (BuildCompat.isS()) {
-                Object record = BRActivityThread.get(BlackBoxCore.mainThread()).getLaunchingActivity(token);
-                ActivityThreadActivityClientRecordContext clientRecordContext = BRActivityThreadActivityClientRecord.get(record);
-                clientRecordContext._set_intent(stubRecord.mTarget);
-                clientRecordContext._set_activityInfo(activityInfo);
-                clientRecordContext._set_packageInfo(BActivityThread.currentActivityThread().getPackageInfo());
+                Object record = null;
+                try {
+                    record = BRActivityThread.get(BlackBoxCore.mainThread()).getLaunchingActivity(token);
+                } catch (Throwable t) {
+                    Slog.d(TAG, "launch: getLaunchingActivity threw: " + t);
+                }
+                if (record != null) {
+                    Slog.d(TAG, "launch: S-branch swap via ActivityClientRecord");
+                    ActivityThreadActivityClientRecordContext clientRecordContext = BRActivityThreadActivityClientRecord.get(record);
+                    clientRecordContext._set_intent(stubRecord.mTarget);
+                    clientRecordContext._set_activityInfo(activityInfo);
+                    clientRecordContext._set_packageInfo(BActivityThread.currentActivityThread().getPackageInfo());
 
-                checkActivityClient();
+                    checkActivityClient();
+                } else {
+                    // Android 16: ActivityThread internals changed and the
+                    // launching-activity record lookup returns null — the
+                    // silent no-op here caused an infinite ProxyActivity
+                    // relaunch loop (stub → stub → stub). Fall back to
+                    // rewriting the LaunchActivityItem inside the
+                    // transaction itself — still consumed after this
+                    // handler returns.
+                    Slog.d(TAG, "launch: S-branch record null — PIE fallback (transaction item rewrite)");
+                    LaunchActivityItemContext launchActivityItemContext = BRLaunchActivityItem.get(r);
+                    launchActivityItemContext._set_mIntent(stubRecord.mTarget);
+                    launchActivityItemContext._set_mInfo(activityInfo);
+                    checkActivityClient();
+                }
+                return true;
             } else if (BuildCompat.isPie()) {
                 LaunchActivityItemContext launchActivityItemContext = BRLaunchActivityItem.get(r);
                 launchActivityItemContext._set_mIntent(stubRecord.mTarget);
                 launchActivityItemContext._set_mInfo(activityInfo);
+                return true;
             } else {
                 ActivityThreadActivityClientRecordContext clientRecordContext = BRActivityThreadActivityClientRecord.get(r);
                 clientRecordContext._set_intent(stubRecord.mTarget);
                 clientRecordContext._set_activityInfo(activityInfo);
+                return true;
             }
         }
+        Slog.d(TAG, "launch: no stub record activityInfo — passthrough");
         return false;
     }
 

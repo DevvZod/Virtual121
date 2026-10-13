@@ -122,6 +122,14 @@ JniHook::HookJniFun(JNIEnv *env, const char *class_name, const char *method_name
     if (HookEnv.art_method_native_offset == 0) {
         return;
     }
+    // Defensive: a failed hook earlier in the chain (or any uncleared
+    // exception) must never poison this call — CheckJNI aborts the process
+    // on JNI calls made with a pending exception (seen on Android 16:
+    // RegisterNatives of an obsolete signature left NoSuchMethodError
+    // pending, and the NEXT FindClass killed the guest).
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+    }
     jclass clazz = env->FindClass(class_name);
     if (!clazz) {
         ALOGD("findClass fail: %s %s", class_name, method_name);
@@ -144,13 +152,31 @@ JniHook::HookJniFun(JNIEnv *env, const char *class_name, const char *method_name
     };
 
     auto artMethod = reinterpret_cast<uintptr_t *>(GetArtMethod(env, clazz, method));
+    // GetArtMethod reflects into hidden fields (Executable.artMethod) —
+    // restricted on newer Android: clear any pending exception instead of
+    // letting it abort a later JNI call.
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        ALOGD("get art method failed: %s %s", class_name, method_name);
+        return;
+    }
+    if (!artMethod) {
+        ALOGD("art method null: %s %s", class_name, method_name);
+        return;
+    }
     if (!CheckFlags(artMethod)) {
         ALOGE("check flags error. class：%s, method：%s", class_name, method_name);
         return;
     }
     *orig_fun = reinterpret_cast<void *>(artMethod[HookEnv.art_method_native_offset]);
     if (env->RegisterNatives(clazz, gMethods, 1) < 0) {
-        ALOGE("jni hook error. class：%s, method：%s", class_name, method_name);
+        // CRITICAL: RegisterNatives failure throws NoSuchMethodError and
+        // LEAVES IT PENDING. Without clearing, the next FindClass in the
+        // chain aborts the whole guest process (CheckJNI).
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        ALOGD("jni hook unavailable on this OS: %s %s", class_name, method_name);
         return;
     }
     // FastNative

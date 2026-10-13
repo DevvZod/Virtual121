@@ -89,7 +89,7 @@ public class IAccountManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return BAccountManager.get().getAccountsForPackage((String) args[0], (int) args[1]);
+            return BAccountManager.get().getAccountsForPackage((String) args[0], ((Number) args[1]).intValue());
         }
     }
 
@@ -164,7 +164,7 @@ public class IAccountManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            BAccountManager.get().copyAccountToUser((IAccountManagerResponse) args[0], (Account) args[1], (int) args[2], (int) args[3]);
+            BAccountManager.get().copyAccountToUser((IAccountManagerResponse) args[0], (Account) args[1], ((Number) args[2]).intValue(), ((Number) args[3]).intValue());
             return 0;
         }
     }
@@ -233,7 +233,7 @@ public class IAccountManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            BAccountManager.get().updateAppPermission((Account) args[0], (String) args[1], (int) args[2], (boolean) args[3]);
+            BAccountManager.get().updateAppPermission((Account) args[0], (String) args[1], ((Number) args[2]).intValue(), (boolean) args[3]);
             return 0;
         }
     }
@@ -373,7 +373,7 @@ public class IAccountManagerProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             return BAccountManager.get().setAccountVisibility((Account) args[0],
                     (String) args[1],
-                    (int) args[2]
+                    ((Number) args[2]).intValue()
             );
         }
     }

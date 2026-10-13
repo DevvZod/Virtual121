@@ -1,19 +1,17 @@
-plugins {
-    id 'com.android.library'
-}
-
+plugins { id 'com.android.library' }
 android {
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    namespace 'top.niunaijun.android_mirror'
+    compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
 
-    aidlPackageWhiteList "android/app/IServiceConnection.aidl"
-    aidlPackageWhiteList "android/accounts/IAccountManagerResponse.aidl"
-
+    // AGP 8: export these AIDL interfaces to consumers (Bcore imports them)
+    aidlPackagedList "android/app/IServiceConnection.aidl"
+    aidlPackagedList "android/accounts/IAccountManagerResponse.aidl"
     defaultConfig {
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles "consumer-rules.pro"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        consumerProguardFiles 'consumer-rules.pro'
     }
-
     buildTypes {
         release {
             minifyEnabled false
@@ -24,11 +22,47 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    buildFeatures {
+        aidl true
+    }
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
 }
-
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation project(':Bcore:black-fake')
     implementation "com.github.CodingGay.BlackReflection:core:$rootProject.ext.blackReflection"
     annotationProcessor "com.github.CodingGay.BlackReflection:compiler:$rootProject.ext.blackReflection"
+}
+
+
+
+// -- HORCRUX build fix ---------------------------------------------
+// build-tools 33+ aidl.exe embeds the full command line in the generated
+// file header. On Windows, project paths containing `\user\` become
+// illegal unicode escapes (\u + non-hex) for javac — even inside
+// comments (JLS processes \u escapes before lexing). Strip the comment
+// after AIDL generation, before Java compilation.
+def stripAidlHeaders = tasks.register('stripAidlHeaders') {
+    def genDir = layout.buildDirectory.dir('generated/aidl_source_output_dir')
+    doLast {
+        def outDir = genDir.get().asFile
+        if (!outDir.exists()) return
+        outDir.eachFileRecurse { f ->
+            if (f.name.endsWith('.java')) {
+                def text = f.getText('UTF-8')
+                def stripped = text.replaceAll('(?m)^\\s*\\* Using:.*\\r?\\n', '')
+                if (stripped != text) f.setText(stripped, 'UTF-8')
+            }
+        }
+    }
+}
+tasks.matching { it.name.endsWith('Aidl') }.configureEach {
+    finalizedBy stripAidlHeaders
+}
+tasks.matching { it.name.contains('JavaWithJavac') }.configureEach {
+    mustRunAfter stripAidlHeaders
+    dependsOn stripAidlHeaders
 }

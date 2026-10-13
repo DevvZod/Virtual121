@@ -14,6 +14,13 @@ import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
 
 public class ComponentUtils {
 
+    public static final String ACTION_REQUEST_PERMISSIONS =
+            "android.content.pm.action.REQUEST_PERMISSIONS";
+
+    public static boolean isRequestPermission(Intent intent) {
+        return ACTION_REQUEST_PERMISSIONS.equals(intent.getAction());
+    }
+
     public static boolean isRequestInstall(Intent intent) {
         return "application/vnd.android.package-archive".equals(intent.getType());
     }

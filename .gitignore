@@ -86,3 +86,4 @@ lint/tmp/
 
 # mac
 *.DS_Store
+build_log.txt

@@ -86,7 +86,7 @@ public class INotificationManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String tag = (String) args[getTagIndex()];
-            int id = (int) args[getIdIndex()];
+            int id = ((Number) args[getIdIndex()]).intValue();
             BNotificationManager.get().cancelNotificationWithTag(id, tag);
             return 0;
         }
@@ -110,7 +110,7 @@ public class INotificationManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String tag = (String) args[getTagIndex()];
-            int id = (int) args[getIdIndex()];
+            int id = ((Number) args[getIdIndex()]).intValue();
             Notification notification = MethodParameterUtils.getFirstParam(args, Notification.class);
             BNotificationManager.get().enqueueNotificationWithTag(id, tag, notification);
             return 0;

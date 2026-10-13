@@ -335,7 +335,7 @@ public class IActivityManagerProxy extends ClassInvocationStub {
     public static class GetIntentSender extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            int type = (int) args[0];
+            int type = ((Number) args[0]).intValue();
             Intent[] intents = (Intent[]) args[getIntentsIndex(args)];
             MethodParameterUtils.replaceFirstAppPkg(args);
 
@@ -582,6 +582,17 @@ public class IActivityManagerProxy extends ClassInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceLastUid(args);
             String permission = (String) args[0];
+            // HORCRUX auto-permission model: inside a guest process every
+            // runtime permission check succeeds. The container trusts the
+            // host's storage/manage grants; guests never depend on the real
+            // system's grant state (which tracks the HOST package and can
+            // never reflect the guest's manifest). This is what makes
+            // permission-dependent apps work at all — apps that never ask
+            // (auto-set) already worked; apps that REQUIRE permissions were
+            // failing every check here.
+            if (BActivityThread.currentActivityThread().isInit()) {
+                return PackageManager.PERMISSION_GRANTED;
+            }
             if (permission.equals(Manifest.permission.ACCOUNT_MANAGER)
                     || permission.equals(Manifest.permission.SEND_SMS)) {
                 return PackageManager.PERMISSION_GRANTED;

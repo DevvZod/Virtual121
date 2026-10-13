@@ -1,18 +1,18 @@
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+}
 
 android {
-    compileSdkVersion 28
-    buildToolsVersion "28.0.2"
+    namespace 'top.niunaijun.blackbox'
+    compileSdk rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
 
     defaultConfig {
-        minSdkVersion 21
+        minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
 
         consumerProguardFiles "consumer-rules.pro"
         ndk {
-            // 设置支持的SO库架构
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
         }
     }
@@ -26,48 +26,31 @@ android {
     externalNativeBuild {
         cmake {
             path file('./src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
         }
-    }
-    dexOptions {
-        preDexLibraries false
-        maxProcessCount 8
-        javaMaxHeapSize "4g"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    aaptOptions {
-        cruncherEnabled = false
-        useNewCruncher = false
-    }
     testOptions {
         unitTests.returnDefaultValues = true
     }
-    lintOptions {
+    buildFeatures {
+        aidl true
+    }
+    lint {
         checkReleaseBuilds false
         abortOnError false
-        warningsAsErrors false
-        disable "UnusedResources", 'RestrictedApi'
-        textOutput "stdout"
-        textReport false
-        check 'NewApi', 'InlinedApi'
     }
 }
 
-
-tasks.withType(Javadoc) {
-    options.addStringOption('Xdoclint:none', '-quiet')
-    options.addStringOption('encoding', 'UTF-8')
-    options.addStringOption('charSet', 'UTF-8')
-}
-
-
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
-    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 
-    implementation 'me.weishu:free_reflection:3.0.1'
+    implementation 'com.github.tiann:FreeReflection:3.2.2'
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
     implementation "com.github.CodingGay.BlackReflection:core:$rootProject.ext.blackReflection"
     implementation project(':Bcore:black-fake')
     implementation project(':Bcore:black-hook')
@@ -77,3 +60,34 @@ dependencies {
     implementation project(':Bcore:pine-xposed')
     implementation project(':Bcore:pine-xposed-res')
 }
+
+
+
+// -- HORCRUX build fix ---------------------------------------------
+// build-tools 33+ aidl.exe embeds the full command line in the generated
+// file header. On Windows, project paths containing `\user\` become
+// illegal unicode escapes (\u + non-hex) for javac � even inside
+// comments (JLS processes \u escapes before lexing). Strip the comment
+// after AIDL generation, before Java compilation.
+def stripAidlHeaders = tasks.register('stripAidlHeaders') {
+    def genDir = layout.buildDirectory.dir('generated/aidl_source_output_dir')
+    doLast {
+        def outDir = genDir.get().asFile
+        if (!outDir.exists()) return
+        outDir.eachFileRecurse { f ->
+            if (f.name.endsWith('.java')) {
+                def text = f.getText('UTF-8')
+                def stripped = text.replaceAll('(?m)^\\s*\\* Using:.*\\r?\\n', '')
+                if (stripped != text) f.setText(stripped, 'UTF-8')
+            }
+        }
+    }
+}
+tasks.matching { it.name.endsWith('Aidl') }.configureEach {
+    finalizedBy stripAidlHeaders
+}
+tasks.matching { it.name.contains('JavaWithJavac') }.configureEach {
+    mustRunAfter stripAidlHeaders
+    dependsOn stripAidlHeaders
+}
+

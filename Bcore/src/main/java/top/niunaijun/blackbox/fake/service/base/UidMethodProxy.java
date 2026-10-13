@@ -25,7 +25,7 @@ public class UidMethodProxy extends MethodHook {
 
     @Override
     protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-        int uid = (int) args[index];
+        int uid = ((Number) args[index]).intValue();
         if (uid == BActivityThread.getBUid()) {
             args[index] = BlackBoxCore.getHostUid();
         }

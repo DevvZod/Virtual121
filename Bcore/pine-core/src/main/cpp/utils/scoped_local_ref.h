@@ -5,6 +5,7 @@
 #ifndef PINE_SCOPED_LOCAL_REF_H
 #define PINE_SCOPED_LOCAL_REF_H
 
+#include <cstddef>
 #include "macros.h"
 
 template<typename T>

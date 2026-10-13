@@ -241,7 +241,11 @@ import top.niunaijun.blackbox.utils.compat.PackageParserCompat;
         try {
             PackageParser parser = PackageParserCompat.createParser(new File(file));
             PackageParser.Package aPackage = PackageParserCompat.parsePackage(parser, new File(file), 0);
-            PackageParserCompat.collectCertificates(parser, aPackage, 0);
+            try {
+                PackageParserCompat.collectCertificates(parser, aPackage, 0);
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
             return aPackage;
         } catch (Throwable t) {
             t.printStackTrace();

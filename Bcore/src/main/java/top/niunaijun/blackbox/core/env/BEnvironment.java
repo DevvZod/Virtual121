@@ -6,6 +6,7 @@ import android.os.Environment;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.core.IOCore;
 import top.niunaijun.blackbox.utils.FileUtils;
 
 /**
@@ -17,8 +18,47 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * 此处无Bug
  */
 public class BEnvironment {
-    private static final File sVirtualRoot = new File(BlackBoxCore.getContext().getCacheDir().getParent(), "");
-    private static final File sExternalVirtualRoot = new File(Environment.getExternalStorageDirectory().getAbsolutePath()+"/AkatskiGamespace");
+    // HORCRUX storage model (ported from the modernized NeverLose fork):
+    //  - Internal venv is NESTED under <app>/blackbox (isolated from the
+    //    host app's own files/prefs).
+    //  - External venv is the host's OWN app-specific external dir
+    //    (getExternalFilesDir). That directory is ALWAYS writable on every
+    //    Android version WITHOUT any storage permission (app-specific
+    //    external storage since API 19), always exists (the system creates
+    //    it), and statfs/getUsableSpace on it always reports the true free
+    //    space of the volume.
+    //
+    //  The legacy /sdcard/AkatskiGamespace root (upstream) required
+    //  MANAGE_EXTERNAL_STORAGE, failed mkdirs under scoped storage, and
+    //  made statfs report 0 → the famous guest-side "not enough space"
+    //  even with plenty of free storage. This port removes that class of
+    //  failure entirely.
+    private static final File sVirtualRoot =
+            new File(BlackBoxCore.getContext().getCacheDir().getParent(), "blackbox");
+    private static final File sExternalVirtualRoot = resolveExternalRoot();
+
+    private static File resolveExternalRoot() {
+        File dir = null;
+        try {
+            dir = BlackBoxCore.getContext().getExternalFilesDir("blackbox");
+        } catch (Throwable ignored) {
+        }
+        if (dir == null) {
+            // External storage unavailable — fall back to the internal venv
+            // so the engine still boots (storage-dependent checks will
+            // report the internal volume).
+            dir = new File(BlackBoxCore.getContext().getCacheDir().getParent(), "blackbox_ext");
+        }
+        // Publish the resolved root to IOCore IMMEDIATELY. The OsStub
+        // proxy is already installed while this class initializes, so any
+        // File.exists() below this point re-enters IOCore.redirectPath —
+        // which must never call back into this (mid-initialization) class.
+        try {
+            IOCore.cacheExternalRoot(dir.getAbsolutePath());
+        } catch (Throwable ignored) {
+        }
+        return dir;
+    }
 
     public static File JUNIT_JAR = new File(getCacheDir(), "junit.apk");
     public static File EMPTY_JAR = new File(getCacheDir(), "empty.apk");
@@ -80,7 +120,7 @@ public class BEnvironment {
     }
 
     public static File getExternalUserDir(int userId) {
-        return new File(sExternalVirtualRoot, String.format(Locale.CHINA, "/", userId));
+        return new File(sExternalVirtualRoot, String.format(Locale.CHINA, "%d", userId));
     }
 
     public static File getUserDir(int userId) {

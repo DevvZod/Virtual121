@@ -1,5 +1,7 @@
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
+}
 include ':Bcore'
-include ':app'
 include ':Bcore:black-fake'
 include ':Bcore:black-hook'
 include ':Bcore:pine-xposed'
@@ -8,3 +10,4 @@ include ':Bcore:pine-xposed-res'
 include ':android-mirror'
 
 rootProject.name = "BlackBox"
+include ':horcruxes'

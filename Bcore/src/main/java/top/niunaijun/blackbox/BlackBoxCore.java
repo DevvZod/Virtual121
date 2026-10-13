@@ -221,10 +221,59 @@ public class BlackBoxCore extends ClientConfiguration {
     public InstallResult installPackageAsUser(String packageName, int userId) {
         try {
             PackageInfo packageInfo = getPackageManager().getPackageInfo(packageName, 0);
-            return getBPackageManager().installPackageAsUser(packageInfo.applicationInfo.sourceDir, InstallOption.installBySystem(), userId);
+            InstallResult result = getBPackageManager().installPackageAsUser(
+                    packageInfo.applicationInfo.sourceDir, InstallOption.installBySystem(), userId);
+            if (result.success) {
+                // SPLIT APK support: clone every split of the real install
+                // next to the venv base.apk. The virtual PackageManager then
+                // exposes them through ApplicationInfo.splitSourceDirs (see
+                // PackageManagerCompat.generateApplicationInfo), and the
+                // framework wires the guest classloader + AssetManager from
+                // that field automatically (AOSP: LoadedApk
+                // .createOrUpdateClassLoaderLocked / createAssetManager).
+                // Without this, split-shipped assets (MLBB reads
+                // comlibs/*.bytes from its own APKs during resource
+                // extraction) are missing and the game dies with
+                // "Extract Failed (open file: comlibs/... error: 2)".
+                copySplitsIntoVenv(packageName, packageInfo.applicationInfo);
+            }
+            return result;
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
             return new InstallResult().installError(e.getMessage());
+        }
+    }
+
+    private void copySplitsIntoVenv(String packageName, ApplicationInfo realInfo) {
+        try {
+            String[] splits = realInfo.splitSourceDirs;
+            if (splits == null || splits.length == 0) {
+                return;
+            }
+            File baseApk = BEnvironment.getBaseApkDir(packageName);
+            File baseDir = baseApk.getParentFile();
+            if (baseDir == null) {
+                return;
+            }
+            if (!baseDir.exists()) {
+                baseDir.mkdirs();
+            }
+            for (String splitPath : splits) {
+                if (splitPath == null) {
+                    continue;
+                }
+                File src = new File(splitPath);
+                if (!src.exists() || src.length() == 0) {
+                    continue;
+                }
+                File dst = new File(baseDir, "split_" + src.getName());
+                FileUtils.copyFile(src, dst);
+                android.util.Log.i("HORCRUX", "split cloned: " + src.getName()
+                        + " (" + src.length() + " bytes) -> " + dst.getAbsolutePath());
+            }
+            android.util.Log.i("HORCRUX", "splits cloned for " + packageName + ": " + splits.length);
+        } catch (Throwable t) {
+            android.util.Log.e("HORCRUX", "split clone failed for " + packageName, t);
         }
     }
 

@@ -51,18 +51,22 @@ public class PackageParserCompat {
     }
 
     public static void collectCertificates(PackageParser parser, Package p, int flags) throws Throwable {
-        if (BuildCompat.isPie()) {
-            BRPackageParserPie.getWithException().collectCertificates(p, true/*skipVerify*/);
-        } else if (API_LEVEL >= N) {
-            BRPackageParserNougat.getWithException().collectCertificates(p, flags);
-        } else if (API_LEVEL >= M) {
-            BRPackageParserMarshmallow.getWithException(parser).collectCertificates(p, flags);
-        } else if (API_LEVEL >= LOLLIPOP_MR1) {
-            BRPackageParserLollipop22.getWithException(parser).collectCertificates(p, flags);
-        } else if (API_LEVEL >= LOLLIPOP) {
-            BRPackageParserLollipop.getWithException(parser).collectCertificates(p, flags);
-        } else {
-            BRPackageParser.get(parser).collectCertificates(p, flags);
+        try {
+            if (BuildCompat.isPie()) {
+                BRPackageParserPie.getWithException().collectCertificates(p, true/*skipVerify*/);
+            } else if (API_LEVEL >= N) {
+                BRPackageParserNougat.getWithException().collectCertificates(p, flags);
+            } else if (API_LEVEL >= M) {
+                BRPackageParserMarshmallow.getWithException(parser).collectCertificates(p, flags);
+            } else if (API_LEVEL >= LOLLIPOP_MR1) {
+                BRPackageParserLollipop22.getWithException(parser).collectCertificates(p, flags);
+            } else if (API_LEVEL >= LOLLIPOP) {
+                BRPackageParserLollipop.getWithException(parser).collectCertificates(p, flags);
+            } else {
+                BRPackageParser.get(parser).collectCertificates(p, flags);
+            }
+        } catch (Throwable t) {
+            t.printStackTrace();
         }
     }
 }
