@@ -154,6 +154,17 @@ public class IOCore {
             rule.put(String.format("/data/data/%s", packageName), packageInfo.dataDir);
             rule.put(String.format("/data/user/%d/%s", systemUserId, packageName), packageInfo.dataDir);
 
+            // Redirect ART PGO profile files for the virtual package.
+            // /data/misc/profiles/cur/<userId>/<pkg>/ is owned by the real system UID;
+            // BlackBox's child process is blocked from opening it (SELinux EACCES).
+            // Redirecting to a subdirectory inside the virtual dataDir allows ART to
+            // read/write .split.prof files for profile-guided compilation inside the sandbox.
+            String virtualProfileDir = packageInfo.dataDir + "/virtual_profiles";
+            rule.put(String.format("/data/misc/profiles/cur/%d/%s", systemUserId, packageName), virtualProfileDir);
+            rule.put(String.format("/data/misc/profiles/ref/%s", packageName), virtualProfileDir + "/ref");
+            new java.io.File(virtualProfileDir).mkdirs();
+            new java.io.File(virtualProfileDir + "/ref").mkdirs();
+
             if (BlackBoxCore.getContext().getExternalCacheDir() != null && context.getExternalCacheDir() != null) {
                 File external = BEnvironment.getExternalUserDir(BActivityThread.getUserId());
 
