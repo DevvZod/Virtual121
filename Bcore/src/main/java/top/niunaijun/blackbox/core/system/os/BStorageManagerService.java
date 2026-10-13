@@ -15,6 +15,7 @@ import top.niunaijun.blackbox.core.system.ISystemService;
 import top.niunaijun.blackbox.core.system.user.BUserHandle;
 import top.niunaijun.blackbox.fake.provider.FileProvider;
 import top.niunaijun.blackbox.proxy.ProxyManifest;
+import top.niunaijun.blackbox.utils.FileUtils;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 
 /**
@@ -37,20 +38,29 @@ public class BStorageManagerService extends IBStorageManagerService.Stub impleme
 
     @Override
     public StorageVolume[] getVolumeList(int uid, String packageName, int flags, int userId) throws RemoteException {
-        if (BRStorageManager.get().getVolumeList(0, 0) == null) {
-            return null;
-        }
         try {
-            StorageVolume[] storageVolumes = BRStorageManager.get().getVolumeList(BUserHandle.getUserId(Process.myUid()), 0);
-            if (storageVolumes == null)
-                return null;
-            for (StorageVolume storageVolume : storageVolumes) {
-                BRStorageVolume.get(storageVolume)._set_mPath(BEnvironment.getExternalUserDir(userId));
-                if (BuildCompat.isPie()) {
-                    BRStorageVolume.get(storageVolume)._set_mInternalPath(BEnvironment.getExternalUserDir(userId));
-                }
+            StorageVolume[] storageVolumes = null;
+            try {
+                storageVolumes = BRStorageManager.get().getVolumeList(BUserHandle.getUserId(Process.myUid()), 0);
+            } catch (Throwable ignored) {
             }
-            return storageVolumes;
+            if (storageVolumes != null) {
+                File targetDir = BEnvironment.getExternalUserDir(userId);
+                FileUtils.mkdirs(targetDir);
+                for (StorageVolume storageVolume : storageVolumes) {
+                    try {
+                        BRStorageVolume.get(storageVolume)._set_mPath(targetDir);
+                    } catch (Throwable ignored) {
+                    }
+                    if (BuildCompat.isPie()) {
+                        try {
+                            BRStorageVolume.get(storageVolume)._set_mInternalPath(targetDir);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                return storageVolumes;
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

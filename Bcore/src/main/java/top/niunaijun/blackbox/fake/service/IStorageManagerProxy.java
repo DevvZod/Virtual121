@@ -12,6 +12,7 @@ import black.android.os.storage.BRIStorageManagerStub;
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.core.IOCore;
+import top.niunaijun.blackbox.core.env.BEnvironment;
 import top.niunaijun.blackbox.fake.hook.BinderInvocationStub;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
@@ -46,6 +47,7 @@ public class IStorageManagerProxy extends BinderInvocationStub {
     @Override
     protected void inject(Object baseInvocation, Object proxyInvocation) {
         replaceSystemService("mount");
+        replaceSystemService("storage");
     }
 
     @Override
@@ -57,24 +59,63 @@ public class IStorageManagerProxy extends BinderInvocationStub {
     public static class GetVolumeList extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args == null) {
-                StorageVolume[] volumeList = BlackBoxCore.getBStorageManager().getVolumeList(BActivityThread.getBUid(), null, 0, BActivityThread.getUserId());
-                if (volumeList == null) {
-                    return method.invoke(who, args);
+            Object result = null;
+            try {
+                result = method.invoke(who, args);
+            } catch (Throwable ignored) {
+            }
+            if (result instanceof StorageVolume[]) {
+                StorageVolume[] volumes = (StorageVolume[]) result;
+                File targetDir = BEnvironment.getExternalUserDir(BActivityThread.getUserId());
+                FileUtils.mkdirs(targetDir);
+                for (StorageVolume volume : volumes) {
+                    patchVolume(volume, targetDir);
                 }
-                return volumeList;
+                return volumes;
             }
             try {
-                int uid = ((Number) args[0]).intValue();
-                String packageName = (String) args[1];
-                int flags = ((Number) args[2]).intValue();
-                StorageVolume[] volumeList = BlackBoxCore.getBStorageManager().getVolumeList(uid, packageName, flags, BActivityThread.getUserId());
-                if (volumeList == null) {
-                    return method.invoke(who, args);
+                StorageVolume[] volumeList = BlackBoxCore.getBStorageManager().getVolumeList(BActivityThread.getBUid(), null, 0, BActivityThread.getUserId());
+                if (volumeList != null) {
+                    return volumeList;
                 }
-                return volumeList;
-            } catch (Throwable t) {
-                return method.invoke(who, args);
+            } catch (Throwable ignored) {
+            }
+            return result;
+        }
+    }
+
+    @ProxyMethod("getVolumes")
+    public static class GetVolumes extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            Object result = method.invoke(who, args);
+            if (result != null && result.getClass().isArray()) {
+                File targetDir = BEnvironment.getExternalUserDir(BActivityThread.getUserId());
+                FileUtils.mkdirs(targetDir);
+                int len = java.lang.reflect.Array.getLength(result);
+                for (int i = 0; i < len; i++) {
+                    Object item = java.lang.reflect.Array.get(result, i);
+                    patchVolume(item, targetDir);
+                }
+            }
+            return result;
+        }
+    }
+
+    private static void patchVolume(Object volume, File targetDir) {
+        if (volume == null || targetDir == null) return;
+        for (Class<?> c = volume.getClass(); c != null; c = c.getSuperclass()) {
+            for (String fieldName : new String[]{"mPath", "mInternalPath", "mActivitySecurePath", "path", "internalPath"}) {
+                try {
+                    java.lang.reflect.Field f = c.getDeclaredField(fieldName);
+                    f.setAccessible(true);
+                    if (f.getType() == File.class) {
+                        f.set(volume, targetDir);
+                    } else if (f.getType() == String.class) {
+                        f.set(volume, targetDir.getAbsolutePath());
+                    }
+                } catch (Throwable ignored) {
+                }
             }
         }
     }

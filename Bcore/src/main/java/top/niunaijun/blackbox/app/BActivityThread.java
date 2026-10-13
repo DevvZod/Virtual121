@@ -344,6 +344,17 @@ public class BActivityThread extends IBActivityThread.Stub {
         IOCore.get().enableRedirect(packageContext);
         CreateUserExecutor.ensureUserDirs(packageName, getUserId());
         ContextCompat.fix(packageContext);
+        try {
+            Method initForCurrentUser = android.os.Environment.class.getDeclaredMethod("initForCurrentUser");
+            initForCurrentUser.setAccessible(true);
+            initForCurrentUser.invoke(null);
+        } catch (Throwable ignored) {
+        }
+        try {
+            File ext = packageContext.getExternalFilesDir(null);
+            Slog.d("BActivityThread", "Redirected getExternalFilesDir: " + (ext != null ? ext.getAbsolutePath() : "null"));
+        } catch (Throwable ignored) {
+        }
 
         AppBindData bindData = new AppBindData();
         bindData.appInfo = applicationInfo;
